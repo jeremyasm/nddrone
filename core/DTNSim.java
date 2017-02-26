@@ -75,9 +75,8 @@ public class DTNSim {
 		}
 		
 		//TODO
-//		confFiles[0] = "2nodes_test_setting.txt";
 //		confFiles[0] = "base_test_setting.txt";
-		confFiles[0] = "base_test_setting_NDDR.txt";
+		confFiles[0] = "NDDR_settings.txt";
 //		confFiles[0] = "epidemic_settings.txt";
 //		confFiles[0] = "prophet_settings.txt";
 //		confFiles[0] = "snw_settings.txt";
