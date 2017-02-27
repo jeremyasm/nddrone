@@ -24,11 +24,10 @@ import core.Settings;
 public class NDDRRouter extends ActiveRouter {
 	
 	//----------------- Configuration ------------------
+	public static final boolean isDistanceEnabled = true; 
+	
 	public static final int Nr_OF_DATA_NAMES = 10; // Configurable, [1,26], must be the same with the number of "toHosts" in settings.txt
 	public static final int Nr_OF_HOSTS = 100; // Configurable, must be the same with "Group.nrofHosts" in settings.txt
-	
-	public static final boolean isDistanceEnabled = true; 
-
 	public static final int DEFAULT_DEST_DIST = 999;
 	//--------------------------------------------------
 
