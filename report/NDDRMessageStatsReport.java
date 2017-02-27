@@ -22,10 +22,13 @@ import routing.NDDRRouter;
 public class NDDRMessageStatsReport extends Report implements MessageListener {
 	private Map<String, Double> creationTimes;
 	private List<Double> latencies;
-	private List<Integer> hopCounts;
+	private List<Integer> hopCountsOfData;
 	private List<Double> msgBufferTime;
 	private List<Double> rtt; // round trip times
-	private HashSet<String> hashSet;
+	private HashSet<String> interestCreateSet;
+	private HashSet<String> interestDeliverySet;
+	private HashSet<String> dataCreateSet;
+	private HashSet<String> dataDeliverySet;
 
 	private int nrofDropped;
 	private int nrofRemoved;
@@ -38,8 +41,10 @@ public class NDDRMessageStatsReport extends Report implements MessageListener {
 	private int nrofDelivered;
 
 	private int nrofInterestCreated;
-	private int nrofDataCreated;
-	private int nrofDataDelivered;
+	private int nrofDifferentInterestsCreatedOnDifferentHosts;
+	private int nrofDifferentInterestsFromDifferentHostsDelivered;
+	private int nrofDifferentDataCreatedToDifferentHosts;
+	private int nrofDifferentDataDeliveredToDifferentHosts;
 
 	/**
 	 * Constructor.
@@ -54,9 +59,12 @@ public class NDDRMessageStatsReport extends Report implements MessageListener {
 		this.creationTimes = new HashMap<String, Double>();
 		this.latencies = new ArrayList<Double>();
 		this.msgBufferTime = new ArrayList<Double>();
-		this.hopCounts = new ArrayList<Integer>();
+		this.hopCountsOfData = new ArrayList<Integer>();
 		this.rtt = new ArrayList<Double>();
-		this.hashSet = new HashSet<String>();
+		this.interestCreateSet = new HashSet<String>();
+		this.interestDeliverySet = new HashSet<String>();
+		this.dataCreateSet = new HashSet<String>();
+		this.dataDeliverySet = new HashSet<String>();
 
 		this.nrofDropped = 0;
 		this.nrofRemoved = 0;
@@ -65,11 +73,13 @@ public class NDDRMessageStatsReport extends Report implements MessageListener {
 		this.nrofRelayed = 0;
 		this.nrofCreated = 0;
 		this.nrofInterestCreated = 0;
-		this.nrofDataCreated = 0;
+		this.nrofDifferentInterestsCreatedOnDifferentHosts = 0;
+		this.nrofDifferentDataCreatedToDifferentHosts = 0;
 		this.nrofResponseReqCreated = 0;
 		this.nrofResponseDelivered = 0;
 		this.nrofDelivered = 0;
-		this.nrofDataDelivered = 0;
+		this.nrofDifferentDataDeliveredToDifferentHosts = 0;
+		this.nrofDifferentInterestsFromDifferentHostsDelivered = 0;
 	}
 
 	public void messageDeleted(Message m, DTNHost where, boolean dropped) {
@@ -81,6 +91,11 @@ public class NDDRMessageStatsReport extends Report implements MessageListener {
 			this.nrofDropped++;
 		} else {
 			this.nrofRemoved++;
+			if(m.getProperty(NDDRRouter.TYPE).equals(NDDRRouter.TYPE_INTEREST)){
+				this.nrofDelivered++; // delivery of interest
+				if (this.interestDeliverySet.add(m.getFrom() + "_" + m.getDataName())) 
+					this.nrofDifferentInterestsFromDifferentHostsDelivered++;
+			}
 		}
 
 		this.msgBufferTime.add(getSimTime() - m.getReceiveTime());
@@ -102,15 +117,11 @@ public class NDDRMessageStatsReport extends Report implements MessageListener {
 
 		this.nrofRelayed++;
 		if (finalTarget) {
-			this.nrofDelivered++;
-			if (this.hashSet.add(m.getTo() + "_" + m.getDataName())) {
+			this.nrofDelivered++; //delivery of data
+			if (this.dataDeliverySet.add(m.getTo() + "_" + m.getDataName())) {
+				this.nrofDifferentDataDeliveredToDifferentHosts++;
 				this.latencies.add(getSimTime() - this.creationTimes.get(m.getId()));
-				this.nrofDataDelivered++;
-				this.hopCounts.add(m.getHops().size() - 1);
-				if (m.isResponse()) {
-					this.rtt.add(getSimTime() - m.getRequest().getCreationTime());
-					this.nrofResponseDelivered++;
-				}
+				this.hopCountsOfData.add(m.getHops().size() - 1);
 			}
 		}
 	}
@@ -122,11 +133,16 @@ public class NDDRMessageStatsReport extends Report implements MessageListener {
 		}
 		this.creationTimes.put(m.getId(), getSimTime());
 		this.nrofCreated++;
-		if (m.getProperty("type").equals(NDDRRouter.TYPE_DATA)) {
-			this.nrofDataCreated++;
+		if (m.getProperty(NDDRRouter.TYPE).equals(NDDRRouter.TYPE_DATA)) {
+			if (this.dataCreateSet.add(m.getTo() + "_" + m.getDataName())) {
+				this.nrofDifferentDataCreatedToDifferentHosts++;
+			}
 		}
-		if (m.getProperty("type").equals(NDDRRouter.TYPE_INTEREST)) {
+		if (m.getProperty(NDDRRouter.TYPE).equals(NDDRRouter.TYPE_INTEREST)) {
 			this.nrofInterestCreated++;
+			if (this.interestCreateSet.add(m.getFrom() + "_" + m.getDataName())) {
+				this.nrofDifferentInterestsCreatedOnDifferentHosts++;
+			}
 		}
 		if (m.getResponseSize() > 0) {
 			this.nrofResponseReqCreated++;
@@ -145,37 +161,40 @@ public class NDDRMessageStatsReport extends Report implements MessageListener {
 	public void done() {
 		write("Message stats for scenario " + getScenarioName() + "\nsim_time: " + format(getSimTime()));
 		double deliveryProb = 0; // delivery probability
-		double responseProb = 0; // request-response success probability
 		double overHead = Double.NaN; // overhead ratio
+		double interestDeliveryProb = 0; // delivery probability of interest messages
+		double dataDeliveryProb = 0; // delivery probability of data messages
 
-		if (this.nrofInterestCreated > 0) {
-			deliveryProb = (1.0 * this.nrofDataDelivered) / this.nrofInterestCreated;
+		if (this.nrofDifferentInterestsCreatedOnDifferentHosts > 0) {
+			deliveryProb = (1.0 * this.nrofDifferentDataDeliveredToDifferentHosts) / this.nrofDifferentInterestsCreatedOnDifferentHosts;
+		}
+		if (this.nrofDifferentInterestsCreatedOnDifferentHosts > 0) {
+			interestDeliveryProb = (1.0 * this.nrofDifferentInterestsFromDifferentHostsDelivered) / this.nrofDifferentInterestsCreatedOnDifferentHosts;
+		}
+		if (this.nrofDifferentDataCreatedToDifferentHosts > 0) {
+			dataDeliveryProb = (1.0 * this.nrofDifferentDataDeliveredToDifferentHosts) / this.nrofDifferentDataCreatedToDifferentHosts;
 		}
 		if (this.nrofDelivered > 0) {
 			overHead = (1.0 * (this.nrofRelayed - this.nrofDelivered)) / this.nrofDelivered;
 		}
-		if (this.nrofResponseReqCreated > 0) {
-			responseProb = (1.0 * this.nrofResponseDelivered) / this.nrofResponseReqCreated;
-		}
 
-		String statsText = "created: " + this.nrofCreated 
-				+ "\nInteret created: " + this.nrofInterestCreated 
-				+ "\nData created: " + this.nrofDataCreated
+		String statsText = "interet_created: " + this.nrofInterestCreated
+				+ "\ninterest_created (de-duplicated): " + this.nrofDifferentInterestsCreatedOnDifferentHosts // for multiple creation of a same interest on a same host, only take one into account 
+				+ "\ndata_created (de-duplicated): " + this.nrofDifferentDataCreatedToDifferentHosts // for multiple creation of a same data on a same host, only take one into account
 				+ "\nstarted: " + this.nrofStarted 
 				+ "\nrelayed: " + this.nrofRelayed 
 				+ "\naborted: " + this.nrofAborted 
 				+ "\ndropped: " + this.nrofDropped 
-				+ "\nremoved: " + this.nrofRemoved 
-				+ "\nData Delivered: " + this.nrofDataDelivered // for multiple deliveries of a same data, only take one into account 
-				+ "\ndelivery_prob: " + format(deliveryProb) 
-				+ "\nresponse_prob: " + format(responseProb) 
+				+ "\nremoved: " + this.nrofRemoved
+				+ "\ndelivered: " + this.nrofDelivered //TODO
+				+ "\ninterest_delivered (de-duplicated): " + this.nrofDifferentInterestsFromDifferentHostsDelivered // for multiple deliveries of a same interest from a same host, only take one into account 
+				+ "\ndata_delivered (de-duplicated): " + this.nrofDifferentDataDeliveredToDifferentHosts // for multiple deliveries of a same data to a same host, only take one into account 
+				+ "\ndelivery_prob: " + format(deliveryProb)
+				+ "\ndelivery_prob_of_interest: " + format(interestDeliveryProb) 
+				+ "\ndelivery_prob_of_data: " + format(dataDeliveryProb) 
 				+ "\noverhead_ratio: " + format(overHead)
 				+ "\nlatency_avg: " + getAverage(this.latencies) 
-				+ "\nlatency_med: " + getMedian(this.latencies)
-				+ "\nhopcount_avg: " + getIntAverage(this.hopCounts) 
-				+ "\nhopcount_med: " + getIntMedian(this.hopCounts)
-				+ "\nbuffertime_avg: " + getAverage(this.msgBufferTime) 
-				+ "\nbuffertime_med: " + getMedian(this.msgBufferTime); 
+				+ "\nhopcount_avg_of_data: " + getIntAverage(this.hopCountsOfData);
 
 		write(statsText);
 		super.done();
