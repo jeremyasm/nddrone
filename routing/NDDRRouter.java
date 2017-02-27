@@ -27,10 +27,9 @@ public class NDDRRouter extends ActiveRouter {
 	public static final int Nr_OF_DATA_NAMES = 10; // Configurable, [1,26], must be the same with the number of "toHosts" in settings.txt
 	public static final int Nr_OF_HOSTS = 100; // Configurable, must be the same with "Group.nrofHosts" in settings.txt
 	
-	public static final boolean DISTANCE_ENABLED = true;
+	public static final boolean isDistanceEnabled = true; 
 
 	public static final int DEFAULT_DEST_DIST = 999;
-	public static final boolean DEFAULT_E_MARK = false;
 	//--------------------------------------------------
 
 	public static final String NDDR_NS = "NDDRRouter";
@@ -240,7 +239,82 @@ public class NDDRRouter extends ActiveRouter {
 
 		} // -------------- end if(INTEREST) --------------
 
-	}
+	} // end processReceivedMessage
+	
+	/**
+	 * Process a received message inside the NDDR router (with Distance disabled)
+	 * @param m , the message received
+	 */
+	private void processReceivedMessageWithDistanceDisabled(Message m){
+				
+		//--------------- For both INTEREST & DATA ----------------
+		// read common fields of the message, both INTEREST and DATA have these fields
+		DTNHost m_srcID = m.getFrom();
+		int m_seqnum = (int) m.getProperty(SEQ_NUM);
+		String m_dataName = m.getDataName();
+		String m_type = (String) m.getProperty(TYPE);
+		int m_size = m.getSize();
+		
+		// --------------- For DATA ONLY ----------------
+		if (m_type.equals(TYPE_DATA)) {
+			// read Data-specific fields, these fields are null in an INTEREST.
+			String m_data = (String) m.getProperty(CONTENT);
+			DTNHost m_destID = m.getTo();
+			int m_destDist = (int) m.getProperty(DEST_DIST);	
+
+			// process in CS for Data
+			if (!this.content_storage.containsKey(m_dataName)) {
+				this.content_storage.put(m_dataName, m_data);
+			} 
+			
+			// process DATA in Pending Interest Table
+			if (this.pending_interest_table.containsKey(m_dataName)) { // hit the dataName !
+				ArrayList<DTNHost> requesters = this.pending_interest_table.get(m_dataName);
+				requesters.remove(m_destID); // no need to create a new DATA message for m_destID
+				for(DTNHost toHost:requesters){
+					int destDist = DEFAULT_DEST_DIST;
+					createNewDataMessage(m_dataName, content_storage.get(m_dataName), toHost, destDist, m_size); 
+				}
+				this.pending_interest_table.remove(m_dataName);
+			}else{ // could not hit the m_dataName in PIT 
+					removeFinishedMessage(m.getId()); // the DATA message finished its tasks, remove it 
+			}
+		} // -------------- end if(DATA) ---------------
+
+		// --------------- For INTEREST ONLY ----------------
+		if (m_type.equals(TYPE_INTEREST)) {
+
+			boolean hitInCS = false;
+			
+			// process INTEREST in Content Storage
+			if (this.content_storage.containsKey(m_dataName)) { // hit the dataName !
+				hitInCS = true;
+				int destDist = DEFAULT_DEST_DIST;
+				createNewDataMessage(m, destDist, content_storage.get(m_dataName));  // create a DATA  
+				deleteMessage(m.getId(), false);  // remove the INTEREST
+			}
+
+			// process INTEREST in Pending Interest Table
+			if (this.pending_interest_table.containsKey(m_dataName)) { // hit the dataName !
+				ArrayList<DTNHost> requesters = this.pending_interest_table.get(m_dataName);
+				if(hitInCS){
+					requesters.remove(m_srcID); 
+					for(DTNHost toHost:requesters){
+						int destDist = DEFAULT_DEST_DIST;
+						createNewDataMessage(m_dataName, content_storage.get(m_dataName), toHost, destDist, m_size); 
+					}
+					this.pending_interest_table.remove(m_dataName);
+				} else if (!requesters.contains(m_srcID))
+					requesters.add(m_srcID); 
+			} else if(!hitInCS){
+				ArrayList<DTNHost> tmp_reqList = new ArrayList<DTNHost>();
+				tmp_reqList.add(m_srcID);
+				this.pending_interest_table.put(m_dataName, tmp_reqList);
+			}
+
+		} // -------------- end if(INTEREST) --------------
+
+	} // end processReceivedMessageWithDistanceDisabled
 	
 	/**
 	 * Create a new INTEREST message
@@ -362,7 +436,12 @@ public class NDDRRouter extends ActiveRouter {
 	public Message messageTransferred(String id, DTNHost from) {
 		
 		Message msg = super.messageTransferred(id, from); //the msg recevied ... it might be an Interest or Data
-		this.processReceivedMessage(msg); 
+		
+		if(isDistanceEnabled)
+			this.processReceivedMessage(msg); 
+		else 
+			this.processReceivedMessageWithDistanceDisabled(msg);
+		
 		return msg; 
 	}
 	

@@ -1,19 +1,19 @@
 Message stats for scenario NDDR_Simluation
 sim_time: 3600.1000
 interet_created: 360
-interest_created (de-duplicated): 98
-data_created (de-duplicated): 71
-started: 650609
-relayed: 650572
+interest_created (de-duplicated): 96
+data_created (de-duplicated): 85
+started: 650694
+relayed: 650657
 aborted: 18
-dropped: 76007
-removed: 600591
-delivered: 47056
-interest_delivered (de-duplicated): 71
-data_delivered (de-duplicated): 71
-delivery_prob: 0.7245
-delivery_prob_of_interest: 0.7245
-delivery_prob_of_data: 1.0000
-overhead_ratio: 12.8255
-latency_avg: 77.9296
-hopcount_avg_of_data: 1.1549
+dropped: 35030
+removed: 637431
+delivered: 43853
+interest_delivered (de-duplicated): 82
+data_delivered (de-duplicated): 81
+delivery_prob: 0.8438
+delivery_prob_of_interest: 0.8542
+delivery_prob_of_data: 0.9529
+overhead_ratio: 13.8372
+latency_avg: 81.2753
+hopcount_avg_of_data: 1.1481
